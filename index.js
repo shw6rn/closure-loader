@@ -98,7 +98,8 @@ module.exports = function (source, inputSourceMap) {
         }
 
         path = loaderUtils.stringifyRequest(self, provideMap[key]);
-        return source.replace(new RegExp(escapeRegExp(search), 'g'), key + '=require(' + path + ').' + key + ';');
+        var updatedRequire = source.replace(new RegExp(escapeRegExp(search), 'g'),  key + `=resolveVariable(require(${path}).${key}, ${key});`);
+        return updatedRequire;
     }
 
     /**
@@ -200,6 +201,15 @@ module.exports = function (source, inputSourceMap) {
      */
     function createPrefix(globalVarTree) {
         var merge = "var __merge=require(" + loaderUtils.stringifyRequest(self, require.resolve('deepmerge')) + ");";
+        var resolveVariableFunctionDef = `var resolveVariable = function(requireValue, templateValue) {
+            switch (typeof(requireValue)) {
+                case 'object':
+                  return __merge(requireValue, templateValue);
+                case 'function':
+                default:
+                  return requireValue;
+            }
+        };`;
         prefix = '';
         Object.keys(globalVarTree).forEach(function (rootVar) {
             prefix += [
@@ -209,11 +219,17 @@ module.exports = function (source, inputSourceMap) {
                 rootVar,
                 '||{},',
                 JSON.stringify(globalVarTree[rootVar]),
-                ');'
+                ');',
+                // 'if(',
+                // !!(globalVarTree[rootVar].style &&globalVarTree[rootVar].style.bidi),
+                // '){debugger;}',
+                // 'console.log(',
+                // rootVar,
+                // ');'
             ].join('');
         });
 
-        return merge + "eval('" +  prefix.replace(/'/g, "\\'") + "');";
+        return merge + resolveVariableFunctionDef + "eval('" +  prefix.replace(/'/g, "\\'") + "');";
     }
 
     /**
